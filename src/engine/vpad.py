@@ -1,4 +1,6 @@
-import pygame, math, time, json, os
+# src/engine/vpad.py
+
+import pygame, math, time, json
 
 def _dist(x1, y1, x2, y2): return math.hypot(x2 - x1, y2 - y1)
 def _now(): return time.perf_counter()
@@ -21,10 +23,8 @@ class VirtualPad:
         self.btn_defs = {}
         for name, v in self.cfg["buttons"].items():
             if "r" in v:
-                # Circle: (center_x, center_y, radius)
                 self.btn_defs[name] = ("circle", (self.w * v["cx"], self.h * v["cy"], self.w * v["r"]))
             else:
-                # Rect: (left, top, width, height)
                 self.btn_defs[name] = (
                     "rect",
                     (
@@ -40,19 +40,14 @@ class VirtualPad:
         self.stick_vec = (0.0, 0.0)
         self.btn_touches = {}  # tid: (btn, down_time)
         self.btn_states = {k: False for k in self.btn_defs}
-        self.btn_hold_times = {}
         self._events = []
 
     def on_touch(self, touches):
         now = _now()
         self._events.clear()
         # --- Stick logic ---
-        stick_owner = self.stick_touch
-        # Release stick if owner's finger not present
-        if stick_owner is not None and not any(t[0] == stick_owner and t[3] for t in touches):
+        if self.stick_touch is not None and not any(t[0] == self.stick_touch and t[3] for t in touches):
             self.stick_touch, self.stick_vec = None, (0.0, 0.0)
-
-        # Assign stick owner if available
         for tid, x, y, dn in touches:
             if not dn: continue
             if self.stick_touch is None and _dist(x, y, *self.st_c) <= self.r_out:
@@ -106,7 +101,6 @@ class VirtualPad:
                         self._events.append(("crouch_cover", {}))
                     else:
                         self._events.append(("parry", {}))
-                # Remove from state
                 del self.btn_touches[(tid, name)]
                 self.btn_states[name] = False
 
@@ -121,7 +115,7 @@ class VirtualPad:
 
     def draw(self, surf, is_active=False):
         opacity = self.opacity_active if is_active else self.opacity_idle
-        # Stick
+        # Draw stick
         stick_outer = self.assets.get("stick_outer")
         stick_inner = self.assets.get("stick_inner")
         if stick_outer:
@@ -138,7 +132,7 @@ class VirtualPad:
         else:
             p = (int(self.st_c[0]+self.stick_vec[0]*self.r_out), int(self.st_c[1]+self.stick_vec[1]*self.r_out))
             pygame.draw.circle(surf, (128,220,255,opacity), p, int(self.r_in))
-        # Buttons
+        # Draw buttons
         for name, (kind, data) in self.btn_defs.items():
             img = self.assets.get(f"btn_{name.lower()}")
             if img:
@@ -154,14 +148,3 @@ class VirtualPad:
                     pygame.draw.circle(surf, color, (int(data[0]), int(data[1])), int(data[2]))
                 else:
                     pygame.draw.rect(surf, color, pygame.Rect(*data), border_radius=10)
-
-# ---------- Sample integration -----------
-
-def load_vpad_config(path_or_dict, screen_w, screen_h, asset_loader):
-    if isinstance(path_or_dict, str):
-        with open(path_or_dict) as f:
-            cfg = json.load(f)
-    else:
-        cfg = path_or_dict
-    assets = {}
-    # Example: asset_loader
